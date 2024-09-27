@@ -1,0 +1,15 @@
+sftp -P 22 demo@test.rebex.net
+password
+get -r / ./downloaded
+
+# https://sftpcloud.io/tools/free-sftp-server
+sftp -P 22 1b918a3818194bd6a340ee6a52609648@eu-central-1.sftpcloud.io
+4AUyzgkJXrQSwLqJ4pAFjvLtEgprKAWZ
+get -r / ./downloaded
+
+# upload files
+put ./downloaded /files
+put -r ./downloaded_old /files
+
+# download files
+get -r / ./downloaded

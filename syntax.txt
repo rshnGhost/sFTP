@@ -1,0 +1,11 @@
+# establish sftp connection
+sftp -P <port> <username>@<host_url>:<localtion_path_from_root>
+
+# enter sftp password
+<password_of_sftp>
+
+# download files recuscively from server
+get -r <server_localtion_path_from_root> <local_localtion_path_from_root>
+
+# upload files recuscively to server
+put -r <local_localtion_path_from_root> <server_localtion_path_from_root>
