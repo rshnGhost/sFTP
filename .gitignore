@@ -1,1 +1,8 @@
+# Ignore
 Pipfile.lock
+download/*
+upload/*
+
+# Whitelist
+!download/.nomedia
+!upload/.nomedia
