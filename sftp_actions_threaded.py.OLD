@@ -1,6 +1,6 @@
 import paramiko
 import os, getpass
-import concurrent.futures
+from multiprocessing import Process
 from utils import calculate_execution_time
 
 def sftp_connect(host, port, username, password=None):
@@ -15,7 +15,6 @@ def sftp_connect(host, port, username, password=None):
         return None
 
 def sftp_get_process(sftp, remote_path, local_path):
-    print(f"Starting Download: \\{remote_path} to {local_path}")
     try:
         sftp.get(remote_path, local_path)
         print(f"Downloaded: \\{remote_path} to {local_path}")
@@ -23,7 +22,6 @@ def sftp_get_process(sftp, remote_path, local_path):
         print(f"Error downloading {remote_path}: {e}")
 
 def sftp_put_process(sftp, remote_path, local_path):
-    print(f"Starting Upload: {local_path} to \\{remote_path}")
     try:
         sftp.put(local_path, remote_path)  # Upload the file
         print(f"Uploaded: {local_path} to \\{remote_path}")
@@ -41,11 +39,9 @@ def sftp_get(sftp, remote_path, local_path, use_threads):
                 sftp_get(sftp, os.path.join(remote_path, item), os.path.join(local_path, item), use_threads)
         else:
             if use_threads:
-                # background_process = Process(target=sftp_get_process, args=(sftp, remote_path, local_path))
-                # background_process.start()
-                # background_process.join()
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    executor.map(sftp_get_process, remote_path, local_path)
+                background_process = Process(target=sftp_get_process, args=(sftp, remote_path, local_path))
+                background_process.start()
+                background_process.join()
             else:
                 sftp_get_process(sftp, remote_path, local_path)
     except Exception as e:
@@ -69,11 +65,9 @@ def sftp_put(sftp, local_path, remote_path, use_threads):
                 sftp_put(sftp, os.path.join(local_path, item), os.path.join(remote_path, item), use_threads)
         else:
             if use_threads:
-                # background_process = Process(target=sftp_put_process, args=(sftp, remote_path, local_path))
-                # background_process.start()
-                # background_process.join()
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    executor.map(sftp_put_process, remote_path, local_path)
+                background_process = Process(target=sftp_put_process, args=(sftp, remote_path, local_path))
+                background_process.start()
+                background_process.join()
             else:
                 sftp_put_process(sftp, remote_path, local_path)
     except Exception as e:
