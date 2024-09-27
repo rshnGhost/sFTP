@@ -1,6 +1,5 @@
 import paramiko
 import os, getpass
-from utils import calculate_execution_time
 
 def sftp_connect(host, port, username, password=None):
     """Connect to an SFTP server."""
@@ -24,7 +23,7 @@ def sftp_get(sftp, remote_path, local_path):
                 sftp_get(sftp, os.path.join(remote_path, item), os.path.join(local_path, item))
         else:
             sftp.get(remote_path, local_path)
-        print(f"Downloaded: \\{remote_path} to {local_path}")
+        print(f"Downloaded: \{remote_path} to {local_path}")
     except Exception as e:
         print(f"Error downloading {remote_path}: {e}")
 
@@ -46,12 +45,22 @@ def sftp_put(sftp, local_path, remote_path):
                 sftp_put(sftp, os.path.join(local_path, item), os.path.join(remote_path, item))
         else:
             sftp.put(local_path, remote_path)  # Upload the file
-            print(f"Uploaded: {local_path} to \\{remote_path}")
+            print(f"Uploaded: {local_path} to \{remote_path}")
     except Exception as e:
         print(f"Error uploading {local_path}: {e}")
 
-@calculate_execution_time
-def action_process(hostname, portnum, username, password):
+
+if __name__ == "__main__":
+    os.system("cls" if os.name == "nt" else "clear")
+    action_mode = int(input("1\t=>\tUpload\n2\t=>\tDownload\nSelect a Option [2]: ") or 2)
+    if action_mode in [None, 0] or action_mode >= 3:
+        exit
+    
+    hostname = input("Enter Hostname [test.rebex.net]: ") or "test.rebex.net"
+    portnum = int(input("Enter Port Number [22]: ") or 22)
+    username = input("Enter Username [demo]: ") or "demo"
+    password = getpass.getpass("Enter Password: ") or "password"
+
     try:
         sftp = sftp_connect(hostname, portnum, username, password)
         if sftp:
@@ -71,16 +80,3 @@ def action_process(hostname, portnum, username, password):
             sftp.close()
     except Exception as err:
         print(f"{err=}")
-
-if __name__ == "__main__":
-    os.system("cls" if os.name == "nt" else "clear")
-    action_mode = int(input("1\t=>\tUpload\n2\t=>\tDownload\nSelect a Option [2]: ") or 2)
-    if action_mode in [None, 0] or action_mode >= 3:
-        exit
-    
-    hostname = input("Enter Hostname [test.rebex.net]: ") or "test.rebex.net"
-    portnum = int(input("Enter Port Number [22]: ") or 22)
-    username = input("Enter Username [demo]: ") or "demo"
-    password = getpass.getpass("Enter Password: ") or "password"
-
-    action_process(hostname, portnum, username, password)

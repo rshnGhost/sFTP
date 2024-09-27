@@ -1,6 +1,7 @@
 import paramiko
 import os, getpass
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from multiprocessing import Process
+from utils import calculate_execution_time
 
 def sftp_connect(host, port, username, password=None):
     """Connect to an SFTP server."""
@@ -13,110 +14,97 @@ def sftp_connect(host, port, username, password=None):
         print(f"Error connecting to SFTP server: {e}")
         return None
 
-def sftp_get_file(sftp, remote_path, local_path):
-    """Download a single file from the SFTP server."""
+def sftp_get_process(sftp, remote_path, local_path):
     try:
         sftp.get(remote_path, local_path)
-        print(f"Downloaded: {remote_path} to {local_path}")
+        print(f"Downloaded: \\{remote_path} to {local_path}")
     except Exception as e:
         print(f"Error downloading {remote_path}: {e}")
 
-def sftp_get(sftp, remote_path, local_path, use_threads=True):
-    """Download a directory or a file from the SFTP server using multithreading."""
+def sftp_put_process(sftp, remote_path, local_path):
     try:
-        if not os.path.exists(local_path):
-            os.makedirs(local_path)
+        sftp.put(local_path, remote_path)  # Upload the file
+        print(f"Uploaded: {local_path} to \\{remote_path}")
+    except Exception as e:
+        print(f"Error uploading {local_path}: {e}")
 
+def sftp_get(sftp, remote_path, local_path, use_threads):
+    """Download a file or directory from the SFTP server."""
+    if remote_path[0] in ["/", "\\"]:
+        remote_path = remote_path[1:]
+    try:
         if sftp.stat(remote_path).st_mode & 0o40000:  # Check if it's a directory
-            items = sftp.listdir(remote_path)
-            paths = [(sftp, os.path.join(remote_path, item), os.path.join(local_path, item)) for item in items]
-
-            if use_threads:
-                with ThreadPoolExecutor() as executor:
-                    executor.map(lambda p: sftp_get_file(*p), paths)
-            else:
-                for p in paths:
-                    sftp_get_file(*p)
+            os.makedirs(local_path, exist_ok=True)
+            for item in sftp.listdir(remote_path):
+                sftp_get(sftp, os.path.join(remote_path, item), os.path.join(local_path, item), use_threads)
         else:
-            sftp_get_file(sftp, remote_path, local_path)
+            if use_threads:
+                background_process = Process(target=sftp_get_process, args=(sftp, remote_path, local_path))
+                background_process.start()
+                background_process.join()
+            else:
+                sftp_get_process(sftp, remote_path, local_path)
     except Exception as e:
         print(f"Error downloading {remote_path}: {e}")
 
-def sftp_put_file(sftp, local_path, remote_path):
-    """Upload a single file to the SFTP server."""
+def sftp_put(sftp, local_path, remote_path, use_threads):
+    """Upload a file or directory to the SFTP server."""
+    if remote_path[0] in ["/", "\\"]:
+        remote_path = remote_path[1:]
     try:
-        sftp.put(local_path, remote_path)
-        print(f"Uploaded: {local_path} to {remote_path}")
-    except Exception as e:
-        print(f"Error uploading {local_path}: {e}")
-
-def sftp_put(sftp, local_path, remote_path, use_threads=True):
-    """Upload a directory or file to the SFTP server using multithreading."""
-    try:
-        if not os.path.exists(local_path):
-            return
-
-        if os.path.isdir(local_path):
-            items = os.listdir(local_path)
-            paths = [(sftp, os.path.join(local_path, item), os.path.join(remote_path, item)) for item in items]
-
-            if use_threads:
-                with ThreadPoolExecutor() as executor:
-                    executor.map(lambda p: sftp_put_file(*p), paths)
-            else:
-                for p in paths:
-                    sftp_put_file(*p)
+        if os.path.isdir(local_path):  # Check if it's a directory
+            try:
+                sftp.mkdir(remote_path)  # Create the remote directory
+            except IOError as e:
+                if 'File already exists' in str(e):
+                    print(f"Directory already exists: {remote_path}")
+                else:
+                    raise  # Raise other IOErrors
+            
+            for item in os.listdir(local_path):
+                sftp_put(sftp, os.path.join(local_path, item), os.path.join(remote_path, item), use_threads)
         else:
-            sftp_put_file(sftp, local_path, remote_path)
+            if use_threads:
+                background_process = Process(target=sftp_put_process, args=(sftp, remote_path, local_path))
+                background_process.start()
+                background_process.join()
+            else:
+                sftp_put_process(sftp, remote_path, local_path)
     except Exception as e:
         print(f"Error uploading {local_path}: {e}")
 
-# Multiprocessing versions (similar structure)
-def sftp_get_mp(sftp, remote_path, local_path):
-    """Download using multiprocessing."""
-    with ProcessPoolExecutor() as executor:
-        # Similar to threading, but use ProcessPoolExecutor
-        sftp_get(sftp, remote_path, local_path, use_threads=False)
-
-def sftp_put_mp(sftp, local_path, remote_path):
-    """Upload using multiprocessing."""
-    with ProcessPoolExecutor() as executor:
-        # Similar to threading, but use ProcessPoolExecutor
-        sftp_put(sftp, local_path, remote_path, use_threads=False)
-
+@calculate_execution_time
+def action_process(hostname, portnum, username, password, use_threads):
+    try:
+        sftp = sftp_connect(hostname, portnum, username, password)
+        if sftp:
+            match action_mode:
+                case 1:
+                    # Put (upload)
+                    local_put_path = input(f"Enter Local Path [{os.path.join(os.getcwd(), "upload")}]: ") or os.path.join(os.getcwd(), "upload")
+                    remote_put_path = input(f"Enter Remote Path [root]: ") or "\\"
+                    sftp_put(sftp, local_put_path, remote_put_path, use_threads)
+                case 2:
+                    # Get (download)
+                    remote_get_path = input(f"Enter Remote Path [root]: ") or "\\"
+                    local_get_path = input(f"Enter Local Path [{os.path.join(os.getcwd(), "download")}]: ") or os.path.join(os.getcwd(), "download")
+                    sftp_get(sftp, remote_get_path, local_get_path, use_threads)
+                case _:
+                    print("Invalid Action")
+            sftp.close()
+    except Exception as err:
+        print(f"{err=}")
 
 if __name__ == "__main__":
     os.system("cls" if os.name == "nt" else "clear")
-    action_mode = int(input("1\t=>\tUpload\n2\t=>\tDownload\nSelect an Option [2]: ") or 2)
+    action_mode = int(input("1\t=>\tUpload\n2\t=>\tDownload\nSelect a Option [2]: ") or 2)
+    if action_mode in [None, 0] or action_mode >= 3:
+        exit
     
     hostname = input("Enter Hostname [test.rebex.net]: ") or "test.rebex.net"
     portnum = int(input("Enter Port Number [22]: ") or 22)
     username = input("Enter Username [demo]: ") or "demo"
     password = getpass.getpass("Enter Password: ") or "password"
+    use_threads = input("Use Multithreading? [y/n]: ").lower() == "y"
 
-    use_multithreading = input("Use Multithreading? [y/n]: ").lower() == 'y'
-    
-    try:
-        sftp = sftp_connect(hostname, portnum, username, password)
-        if sftp:
-            if action_mode == 1:
-                # Put (upload)
-                local_put_path = input(f"Enter Local Path [{os.path.join(os.getcwd(), 'upload')}]: ") or os.path.join(os.getcwd(), 'upload')
-                remote_put_path = input(f"Enter Remote Path [/]: ") or "/"
-                if use_multithreading:
-                    sftp_put(sftp, local_put_path, remote_put_path)
-                else:
-                    sftp_put_mp(sftp, local_put_path, remote_put_path)
-            elif action_mode == 2:
-                # Get (download)
-                remote_get_path = input(f"Enter Remote Path [/]: ") or "/"
-                local_get_path = input(f"Enter Local Path [{os.path.join(os.getcwd(), 'download')}]: ") or os.path.join(os.getcwd(), 'download')
-                if use_multithreading:
-                    sftp_get(sftp, remote_get_path, local_get_path)
-                else:
-                    sftp_get_mp(sftp, remote_get_path, local_get_path)
-            else:
-                print("Invalid Action")
-            sftp.close()
-    except Exception as err:
-        print(f"{err=}")
+    action_process(hostname, portnum, username, password, use_threads)
